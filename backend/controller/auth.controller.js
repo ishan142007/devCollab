@@ -32,5 +32,30 @@ const signup=async(req,res)=>{
     }
 }
 
+ const login=async(req,res)=>{
+    try {
+        const {email,password}=req.body;
+            if(!password||!email) return res.status(400).json({message:"credentails not found "});
+        const user=await User.findOne({email});
+        if(!user)return res.status(404).json({message:"user not found "});
+        const ismatch=bcrypt.compare(password,user.password);
+        if(!ismatch)return res.status(400).json({message:"password is incorrect "});
+        const token=jwt.sign(
+            {
+            id:user._id,
+            email:user.email
+            },
+        process.env.jwtSecretKey,
+        {
+            expiresIn:process.env.jwt_expire_in
+        }
+        )
+        return res.status(200).json({message:"logged in successfully"});
+    } catch (error) {
+        return res.status(500).json({message:error.message})
+    }
+        
+        
+ }
 
-export {signup};
+export {signup,login};
