@@ -50,7 +50,7 @@ const signup=async(req,res)=>{
             expiresIn:process.env.jwt_expire_in
         }
         )
-        return res.status(200).json({message:"logged in successfully"});
+        return res.status(200).json({message:"logged in successfully",token});
     } catch (error) {
         return res.status(500).json({message:error.message})
     }
