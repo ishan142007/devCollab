@@ -21,11 +21,26 @@ const createProject=async(req,res)=>{
 const getProjects=async(req,res)=>{
     try {
         const{id:owner}=req.user;
-        const allProjects=await project.find({owner:owner}).select("title status createdAt").sort({createdAt:-1})
+        const allProjects=await project.find({owner}).select("title status createdAt").sort({createdAt:-1})
         return res.status(200).json({message:"projects retrieved successfully",allProjects});
     } catch (error) {
         return res.status(500).json({message:"internal server error ",error:error.message});
     }
 
 }
-export {createProject,getProjects};
+const getProjectById=async(req,res)=>{
+ try {
+  const owner=req.user.id;
+  const itemId=req.params.id;
+  const item=await project.findOne({
+    _id:itemId,
+    owner
+  });
+  if(!item)return res.status(404).json({message:"not found "})
+    return res.status(200).json({message:"project sent",item});
+ } catch (error) {
+  return res.status(500).json({message:"internal error occured ",error:error.message });
+ }
+}
+
+export {createProject,getProjects,getProjectById};
