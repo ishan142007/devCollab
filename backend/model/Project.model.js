@@ -16,7 +16,7 @@ const projectSchema=mongoose.Schema({
     },
     status:{
         type:String,
-        enum:["Active","Completed","Archieved"],
+        enum:["Active","Completed","Archived"],
         default:"Active"
     }
    

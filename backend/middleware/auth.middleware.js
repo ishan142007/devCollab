@@ -1,10 +1,10 @@
 import jwt from "jsonwebtoken";
 const verifyToken=async(req,res,next)=>{
     try {
-        const authHeader=req.headers.authorization;
+        const authHeader=req.cookie.token;
         if(!authHeader)return res.status(401).json({message:"no token found"});
 
-        const token=authHeader.split(" ")[1];
+        // const token=authHeader.split(" ")[1];
 
         const decoded=jwt.verify(token,process.env.jwtSecretKey);
         req.user=decoded;

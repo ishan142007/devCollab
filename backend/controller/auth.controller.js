@@ -26,7 +26,11 @@ const signup=async(req,res)=>{
             expiresIn:process.env.jwt_expire_in
         }
         );
-        return res.status(201).json({message:"new user created",success:true,token})
+         res.cookie("token",token,{
+            maxAge:7*24*60*60*1000,
+            httpOnly:true
+        })
+        return res.status(201).json({message:"new user created",success:true})
     } catch (error) {
         res.status(500).json({message:error.message});
     }
@@ -50,7 +54,11 @@ const signup=async(req,res)=>{
             expiresIn:process.env.jwt_expire_in
         }
         )
-        return res.status(200).json({message:"logged in successfully",token});
+        res.cookie("token",token,{
+            maxAge:7*24*60*60*1000,
+            httpOnly:true
+        })
+        return res.status(200).json({message:"logged in successfully"});
     } catch (error) {
         return res.status(500).json({message:error.message})
     }
