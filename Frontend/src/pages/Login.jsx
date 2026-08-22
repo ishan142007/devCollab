@@ -1,6 +1,6 @@
 import { useState } from "react"
 import axios from "axios";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 function Login() {
   const [email, setemail] = useState("")
@@ -8,6 +8,7 @@ function Login() {
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const navigate=useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -18,14 +19,17 @@ function Login() {
     }
     setIsLoading(true);
     try {
-      await axios.post("http://localhost:3000/api/login", { email, password: pass }, { withCredentials: true });
+      await axios.post("http://localhost:3000/api/auth/login", { email, password: pass }, { withCredentials: true });
       console.log("login successfull");
+      navigate("/");
+
     } catch (requestError) {
       setError(requestError.response?.data?.message || "We could not sign you in. Please try again.");
     } finally {
       setIsLoading(false);
     }
   }
+
 
   return (
     <main className="auth-page">

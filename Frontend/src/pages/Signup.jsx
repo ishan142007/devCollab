@@ -20,7 +20,7 @@ const Signup = () => {
     }
     setIsLoading(true);
     try {
-      await axios.post("http://localhost:3000/api/signup", { name, email, password: pass }, { withCredentials: true });
+      await axios.post("http://localhost:3000/api/auth/signup", { name, email, password: pass }, { withCredentials: true });
       console.log("signup successfull");
       navigate("/login");
     } catch (requestError) {
