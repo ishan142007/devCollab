@@ -1,6 +1,6 @@
 import axios from 'axios';
 import {createContext,useState ,useEffect}from 'react'
-const AuthContext = createContext();  //yeh el shared channel state create karta hai.
+const AuthContext = createContext();  //yeh ek shared channel state create karta hai.
 
 //createing the provider 
 export const AuthProvider=({children})=>{
