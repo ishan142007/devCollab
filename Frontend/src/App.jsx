@@ -2,7 +2,6 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup"
 // import Signup from "./pages/Signup"
 import { Route, Routes} from "react-router-dom";
-import "./App.css";
 import ProtectedRoutes from "./components/ProtectedRoutes.jsx"
 import Dashboard from "./pages/Dashboard";
 
