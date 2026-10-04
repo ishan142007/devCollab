@@ -1,8 +1,11 @@
 import { useState } from "react"
 import axios from "axios";
+import { useContext } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import AuthContext from "../context/AuthContext";
 
 function Login() {
+  const { checkAuth } = useContext(AuthContext);
   const [email, setemail] = useState("")
   const [pass, setpass] = useState("")
   const [error, setError] = useState("")
@@ -20,7 +23,11 @@ function Login() {
     setIsLoading(true);
     try {
       await axios.post("http://localhost:3000/api/auth/login", { email, password: pass }, { withCredentials: true });
-      console.log("login successfull");
+      const user = await checkAuth();
+      if (!user) {
+        setError("You signed in, but we could not load your account. Please try again.");
+        return;
+      }
       navigate("/");
 
     } catch (requestError) {
