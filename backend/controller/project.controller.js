@@ -6,12 +6,14 @@ const createProject=async(req,res)=>{
   try {
     const owner=req.user.id;
   
-    const {title,description}=req.body;
+    const {title,description,status}=req.body;
     
     if(!title?.trim())return res.status(400).json({message:"invalid data"});
+
     const newproject=await project.create({
         title,
         description,
+        status,
         owner:owner,
     })
     return res.status(201).json({message:"new project created",project:newproject});
@@ -58,10 +60,10 @@ const updateProjectById=async(req,res)=>{
     if(description!==undefined)update.description=description;
     if(status!==undefined)update.status=status;
 
-    const updateProject=await project.findOneAndUpdate({owner,_id:projectId},update,{
+    const updatedProject=await project.findOneAndUpdate({owner,_id:projectId},update,{
       returnDocument:"after"
     });
-    return res.status(200).json({message:"changes applied",updateProject});
+    return res.status(200).json({message:"changes applied",updatednProject});
   } catch (error) {
     return res.status(500).json({message:"internal server error",error:error.message});
   }
