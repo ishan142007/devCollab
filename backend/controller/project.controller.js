@@ -49,22 +49,31 @@ const getProjectById=async(req,res)=>{
 }
 const updateProjectById=async(req,res)=>{
   try {
-    if(Object.keys(req.body).length===0)return res.status(400).json({message:"please send valid changes"});
+    if(!req.body || Object.keys(req.body).length===0)return res.status(400).json({message:"please send valid changes"});
     const {id:owner}=req.user;
     const projectId=req.params.id;
     if(!mongoose.Types.ObjectId.isValid(projectId))return res.status(400).json({message:"project id is not recieved"});
     const update={};
     const {title,description,status}=req.body;
 
-    if(title!==undefined)update.title=title;
+    if(title!==undefined) {
+      if(typeof title!=="string" || !title.trim())return res.status(400).json({message:"project title cannot be empty"});
+      update.title=title.trim();
+    }
     if(description!==undefined)update.description=description;
     if(status!==undefined)update.status=status;
+    if(Object.keys(update).length===0)return res.status(400).json({message:"please send valid changes"});
 
     const updatedProject=await project.findOneAndUpdate({owner,_id:projectId},update,{
-      returnDocument:"after"
+      returnDocument:"after",
+      runValidators:true
     });
-    return res.status(200).json({message:"changes applied",updatednProject});
+    if(!updatedProject)return res.status(404).json({message:"project not found"});
+    return res.status(200).json({message:"changes applied",updatedProject});
   } catch (error) {
+    if(error instanceof mongoose.Error.ValidationError || error instanceof mongoose.Error.CastError) {
+      return res.status(400).json({message:"invalid project changes",error:error.message});
+    }
     return res.status(500).json({message:"internal server error",error:error.message});
   }
 
