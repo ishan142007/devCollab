@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import connectDB from "./Config/db.config.js";
 import router from "./Routes/authRoutes.js";
 import projrouter from "./Routes/project.Routes.js";
+import taskrouter from "./Routes/task.Route.js";
 import cookieParser from "cookie-parser";
 dotenv.config();
 const app=express();
@@ -16,6 +17,7 @@ const app=express();
  }));
 app.use("/api",router);
 app.use("/api",projrouter);
+app.use("/api",taskrouter);
 app.listen("3000",()=>{
     console.log("running ");
 })

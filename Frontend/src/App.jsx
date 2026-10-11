@@ -4,6 +4,7 @@ import Signup from "./pages/Signup"
 import { Route, Routes} from "react-router-dom";
 import ProtectedRoutes from "./components/ProtectedRoutes.jsx"
 import Dashboard from "./pages/Dashboard";
+import ProjectDetails from "./pages/ProjectDetails";
 
 function App() {
 
@@ -21,7 +22,11 @@ function App() {
         <Dashboard/>
       </ProtectedRoutes>
     }/>
-    <Route path="/projects/:id" element={<ProjectDetails />} />
+    <Route path="/projects/:id" element={
+      <ProtectedRoutes>
+        <ProjectDetails />
+      </ProtectedRoutes>
+    } />
   </Routes>
 </>
   )

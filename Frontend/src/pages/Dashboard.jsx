@@ -10,6 +10,7 @@ function Dashboard() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  // const [deletingProjectId, setDeletingProjectId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [theme, setTheme] = useState(() => localStorage.getItem("dashboard-theme") || "light");
@@ -86,6 +87,21 @@ function Dashboard() {
       setSaving(false);
     }
   };
+
+  // const handleDelete = async (projectId) => {
+  //   if (!window.confirm("Are you sure you want to delete this project?")) return;
+
+  //   setDeletingProjectId(projectId);
+  //   setError("");
+  //   try {
+  //     await axios.delete(`${API_URL}/${projectId}`, { withCredentials: true });
+  //     setProjects((current) => current.filter((project) => project._id !== projectId));
+  //   } catch (err) {
+  //     setError(err.response?.data?.message || "We couldn't delete the project. Please try again.");
+  //   } finally {
+  //     setDeletingProjectId(null);
+  //   }
+  // };
 
   if (loading) {
     return (
