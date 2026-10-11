@@ -108,9 +108,13 @@ function Dashboard() {
             <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Projects</h1>
           </div>
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setTheme(isDark ? "light" : "dark")} aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
-              className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-slate-300 hover:bg-slate-50"}`}>
-              {isDark ? "☀ Light" : "☾ Dark"}
+            <button type="button" onClick={() => setTheme(isDark ? "light" : "dark")} aria-label={`Switch to ${isDark ? "light" : "dark"} mode`} title={`Switch to ${isDark ? "light" : "dark"} mode`}
+              className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${isDark ? "border-slate-700 bg-slate-800 text-amber-300 hover:bg-slate-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}>
+              {isDark ? (
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5"><circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.8"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              ) : (
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5"><path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="m16.5 4 .45 1.35L18.3 6l-1.35.45L16.5 7.8l-.45-1.35L14.7 6l1.35-.65L16.5 4Z" fill="currentColor"/></svg>
+              )}
             </button>
             <button onClick={openCreate} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-300">
               <span aria-hidden="true" className="mr-2">＋</span>New project
@@ -138,13 +142,15 @@ function Dashboard() {
         ) : (
           <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
-              <div key={project._id} className="relative">
+              <div key={project._id}>
                 <ProjectCard project={project} onEdit={() => openEdit(project)} />
-                <button type="button" onClick={() => { setError(""); setDeleteProject(project); }}
-                  aria-label={`Delete ${project.title}`} title="Delete project"
-                  className="absolute right-3 top-3 z-[1] rounded-lg border border-rose-200 bg-white/95 px-3 py-2 text-sm font-semibold text-rose-600 shadow-sm transition hover:bg-rose-50">
-                  Delete
-                </button>
+                <div className={`-mt-3 flex justify-end rounded-b-xl border-x border-b px-4 pb-3 pt-1 ${isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+                  <button type="button" onClick={() => { setError(""); setDeleteProject(project); }}
+                    aria-label={`Delete ${project.title}`} title="Delete project"
+                    className="rounded-md px-2 py-1 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700">
+                    Delete <span aria-hidden="true">→</span>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -200,3 +206,4 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
