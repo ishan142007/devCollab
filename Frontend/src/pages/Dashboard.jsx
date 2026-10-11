@@ -1,251 +1,183 @@
-import axios from "axios"
-import { useEffect, useState } from "react"
-import ProjectCard from "../components/ProjectCard"
+import axios from "axios";
+import { useEffect, useState } from "react";
+import ProjectCard from "../components/ProjectCard";
 
-
-
+const API_URL = "http://localhost:3000/api/project";
+const EMPTY_FORM = { title: "", description: "", status: "Active" };
+const STATUSES = ["Active", "Completed", "Archived"];
 
 function Dashboard() {
+  const [showCreate, setShowCreate] = useState(false);
+  const [editProject, setEditProject] = useState(null);
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [showCreate , setShowCreate]  = useState(false); 
-  const [editProject , setEditProject] = useState(null);
-  const [editForm,setEditForm]=useState({
-    title:"",
-    description:"",
-    status:""
-  })
-  const [formData , setFormData] = useState({
-    title:"",
-    description:"",
-    status:"Active"
-  })
-  const [projects, setprojects] = useState([]);
-  const [loading, setloading] = useState(true);
-  const [error, seterror] = useState("");
-  
-  useEffect(()=>{
-    const showprojects=async()=>{
-      setloading(true);
+  useEffect(() => {
+    const loadProjects = async () => {
+      setLoading(true);
+      setError("");
       try {
-        
-        const response=await axios.get("http://localhost:3000/api/project",{withCredentials:true});
-        const allProjects=response.data.allProjects;
-        setprojects(allProjects);
-        if(allProjects.length===0)
-          seterror("no projects found");
-      } catch (error) {
-        seterror(error);
-      }finally{
-        setloading(false);
+        const { data } = await axios.get(API_URL, { withCredentials: true });
+        setProjects(data.allProjects ?? []);
+      } catch (err) {
+        setError(err.response?.data?.message || "We couldn't load your projects. Please try again.");
+      } finally {
+        setLoading(false);
       }
-    }
-    showprojects();
-  },[])
-  
-  
-  const handleCreate=async(e)=>{
+    };
+
+    loadProjects();
+  }, []);
+
+  const handleCreate = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
     try {
-      e.preventDefault();
-      setloading(true);
-      // console.log(formData)
-      const {title,description,status}=formData;
-      
-      const response=await axios.post(
-        "http://localhost:3000/api/project",
-        {
-          title,
-          description,
-          status
-        },
-        {
-          withCredentials:true
-        }
-      );
-      const newProject=response.data.project;
-      setprojects(projects=>[newProject,...projects]);
-      setFormData({
-        title:"",
-        description:"",
-        status:"Active"
-      })
+      const { data } = await axios.post(API_URL, formData, { withCredentials: true });
+      setProjects((current) => [data.project, ...current]);
+      setFormData(EMPTY_FORM);
       setShowCreate(false);
-      
-    } catch (error) {
-      seterror(error.message||"failed to create project");
+    } catch (err) {
+      setError(err.response?.data?.message || "We couldn't create the project. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    finally{
-      setloading(false);
+  };
+
+  const handleEdit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await axios.patch(
+        `${API_URL}/${editProject._id}`,
+        editForm,
+        { withCredentials: true }
+      );
+      const updatedProject = data.updatedProject;
+      setProjects((current) => current.map((project) =>
+        project._id === updatedProject._id ? updatedProject : project
+      ));
+      setEditProject(null);
+      setEditForm(EMPTY_FORM);
+    } catch (err) {
+      setError(err.response?.data?.message || "We couldn't update the project. Please try again.");
+    } finally {
+      setLoading(false);
     }
-  }
-  const handleEdit=async (e) => {
-      e.preventDefault();
-      try {
-        setloading(true);
-         let response=await axios.patch(`https://localhost:3000/api/project/:${editProject._id}`,{withCredentials:true},{
-          title:editForm.title,
-          description:editForm.description,
-          status:editForm.status
-        });
-        const updatedProjects=response.data.updatedProject;
-        setprojects(prevProjects=>prevProjects.map(projects=>projects._id===updatedProjects._id?updatedProjects:projects))
-        setEditProject(null);
-        setEditForm({
-          title:"",
-          description:"",
-          status:""
-        })
-        
-      } catch (error) {
-        seterror(error?.message||"some error occured ");
-      }
-      finally{
-        setloading(false);
-      }
-  
-    }
+  };
 
-  if(loading)return <>.........loading..........</>
-  if(showCreate)return <>
-    <div>
-      <form action=""  onSubmit={handleCreate}>
-      <pre>
-        title: <input type="text" onChange={(e)=>{setFormData({...formData,title:e.target.value})}} className="cursor-pointer "/>
-        <br/>
-        description: <input type="text" onChange={(e)=>{setFormData({...formData,description:e.target.value})}} className="cursor-pointer"/>
-        <br/>
-        status: <select 
-        value={formData.status}
-        onChange={(e)=>{
-          setFormData({...formData,status:e.target.value});
-        }}
-        className="cursor-pointer"
-        >
-          <option value="Active">Active</option>
-          <option value="Completed">Completed</option>
-          <option value="Archived">Archived</option>
+  const closeCreate = () => {
+    setShowCreate(false);
+    setFormData(EMPTY_FORM);
+    setError("");
+  };
 
+  const closeEdit = () => {
+    setEditProject(null);
+    setEditForm(EMPTY_FORM);
+    setError("");
+  };
 
-        </select>
-        <br/>
-        <input type="submit" value="Create" className="cursor-pointer"/><br/>
-        
-        <input type="button" value="cancel" onClick={()=>setShowCreate(false)} className="cursor-pointer"/>
-      </pre>
-      </form> 
-      <p>{error}</p>
-    </div>
-  </>
-  if(editProject)return <>
-
-  <div className=" bg-pink-200 text-black w-screen  h-screen p-3 " >
-      <form action=""  onSubmit={handleEdit}>
-        title: <input type="text" value={editForm.title} onChange={(e)=>{setEditForm({...editForm,title:e.target.value})}} className="cursor-pointer outline-none p-1 rounded-lg "/>
-        <br/>
-        description: <input type="text" value={editForm.description} onChange={(e)=>{setEditForm({...editForm,description:e.target.value})}} className="cursor-pointer p-1 rounded-lg overflow-scroll outline-none "/>
-        <br/>
-        status: <select 
-        value={editForm.status}
-        onChange={(e)=>{setEditForm({...editForm,status:e.target.value})}}
-        className="cursor-pointer p-2 rounded-lg"
-        >
-          <option value="Active">Active</option>
-          <option value="Completed">Completed</option>
-          <option value="Archived">Archived</option>
-
-
-        </select>
-        <br/>
-        <div className="flex mt-2 ml-5 justify-evenly max-w-[20%]">
-
-        <input type="submit" value="Edit" className="cursor-pointer bg-white px-4 py-2 rounded-lg "/><br/>
-        
-        <input type="button" value="cancel" onClick={()=>{
-          setEditProject(null)
-          setEditForm({
-            title:"",
-            description:"",
-            status:""
-          })
-        }} className="cursor-pointer bg-white px-4 py-2 rounded-lg "
-        />
-   
+  const ProjectForm = ({ mode, values, onChange, onSubmit, onCancel }) => (
+    <div className="fixed inset-0 z-10 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <form onSubmit={onSubmit} className="w-full max-w-lg rounded-2xl bg-white p-6 text-slate-900 shadow-2xl sm:p-8">
+        <div className="mb-6">
+          <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600">Project workspace</p>
+          <h2 className="mt-1 text-2xl font-bold">{mode === "create" ? "Create a project" : "Edit project"}</h2>
+          <p className="mt-2 text-sm text-slate-500">Add the details your team needs to stay aligned.</p>
         </div>
-      </form> 
-      <p>{error}</p>
+
+        <div className="space-y-5">
+          <label className="block text-sm font-medium text-slate-700">
+            Project name
+            <input required value={values.title} onChange={(e) => onChange({ ...values, title: e.target.value })}
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+              placeholder="e.g. Website redesign" />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            Description
+            <textarea rows={4} value={values.description} onChange={(e) => onChange({ ...values, description: e.target.value })}
+              className="mt-2 w-full resize-y rounded-lg border border-slate-300 px-3 py-2.5 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+              placeholder="What is this project about?" />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            Status
+            <select value={values.status} onChange={(e) => onChange({ ...values, status: e.target.value })}
+              className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100">
+              {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
+          </label>
+        </div>
+
+        {error && <p role="alert" className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onCancel} className="rounded-lg border border-slate-300 px-4 py-2.5 font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
+          <button type="submit" disabled={loading} className="rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
+            {loading ? "Saving…" : mode === "create" ? "Create project" : "Save changes"}
+          </button>
+        </div>
+      </form>
     </div>
-  </>
+  );
+
+  if (loading && projects.length === 0) {
+    return <main className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600"><p className="animate-pulse">Loading your projects…</p></main>;
+  }
+
   return (
-    <>
-    {/* {editProject&&(
-      <div>
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wider text-indigo-600">Workspace</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Projects</h1>
+          </div>
+          <button onClick={() => { setError(""); setShowCreate(true); }}
+            className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-200">
+            <span aria-hidden="true" className="mr-2">+</span>New project
+          </button>
+        </div>
+      </header>
 
-      <form action=""  onSubmit={handleEdit}>
-      <pre>
-        title: <input type="text" onChange={(e)=>{setFormData({...formData,title:e.target.value})}} className="cursor-pointer "/>
-        <br/>
-        description: <input type="text" onChange={(e)=>{setFormData({...formData,description:e.target.value})}} className="cursor-pointer"/>
-        <br/>
-        status: <select 
-        value={formData.status}
-        onChange={(e)=>{
-          setFormData({...formData,status:e.target.value});
-        }}
-        className="cursor-pointer"
-        >
-        +  <option value="Active">Active</option>
-          <option value="Completed">Completed</option>
-          <option value="Archived">Archived</option>
+      <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
+        <div className="mb-6 flex items-end justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">All projects</h2>
+            <p className="mt-1 text-sm text-slate-500">Keep track of work and project status.</p>
+          </div>
+          <span className="rounded-full bg-slate-200 px-3 py-1 text-sm font-medium text-slate-700">{projects.length} {projects.length === 1 ? "project" : "projects"}</span>
+        </div>
 
-
-        </select>
-        <br/>
-        <input type="submit" value="Create" className="cursor-pointer"/><br/>
-        
-        <input type="button" value="cancel" onClick={()=>setShowCreate(false)} className="cursor-pointer"/>
-      </pre>
-      </form> 
-      <p>{error}</p>
-    </div>
-    )} */}
-      <section className="w-full h-screen bg-black text-white max-h-full overflow-auto">
-
-    <div className="mx-2 mb-2 p-4 rounded-2xl border-black border-2 text-center font-mono text-4xl  ">
-      DashBoard
-    </div>
-    <div className=" text-wrap px-5 border-2 max-w-screen rounded-2xl">
-    <div className="m-2 flex justify-between px-2">
-      <div>
-
-      AllProjects:
-      </div>
-      <div>
-        <button onClick={
-          ()=>{
-          setShowCreate(true)
-          }}>Create</button>
-      </div>
-    </div>
-
-      {
-        projects.map((project)=>(
-          <ProjectCard project={project} onEdit={()=>{
-            setEditProject(project)
-            setEditForm({
-            title:project.title,
-            description:project.description,
-            status:project.status
-          })
-        }}/>
-      ))
-        
-        
-      }
-      <div>{error}</div>
-
-    </div>
+        {error && !showCreate && !editProject && <p role="alert" className="mb-5 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
+        {projects.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-2xl text-indigo-600" aria-hidden="true">✦</div>
+            <h3 className="mt-4 text-lg font-semibold">No projects yet</h3>
+            <p className="mx-auto mt-2 max-w-sm text-sm text-slate-500">Create your first project to organize work and follow its progress.</p>
+            <button onClick={() => setShowCreate(true)} className="mt-5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700">Create a project</button>
+          </div>
+        ) : (
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {projects.map((project) => (
+              <ProjectCard key={project._id} project={project} onEdit={() => {
+                setError("");
+                setEditProject(project);
+                setEditForm({ title: project.title, description: project.description, status: project.status });
+              }} />
+            ))}
+          </div>
+        )}
       </section>
-    </>
-  )
+
+      {showCreate && <ProjectForm mode="create" values={formData} onChange={setFormData} onSubmit={handleCreate} onCancel={closeCreate} />}
+      {editProject && <ProjectForm mode="edit" values={editForm} onChange={setEditForm} onSubmit={handleEdit} onCancel={closeEdit} />}
+    </main>
+  );
 }
 
-export default Dashboard
+export default Dashboard;
