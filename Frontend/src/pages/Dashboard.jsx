@@ -1,12 +1,13 @@
 import axios from "axios";
 import { useEffect, useState } from "react";
-import ProjectCard from "../components/ProjectCard";
+import { useNavigate } from "react-router-dom";
 
 const API_URL = "http://localhost:3000/api/project";
 const EMPTY_FORM = { title: "", description: "", status: "Active" };
 const STATUSES = ["Active", "Completed", "Archived"];
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -142,7 +143,7 @@ function Dashboard() {
         ) : (
           <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
-              <article key={project._id} className={`group flex min-h-[250px] flex-col rounded-2xl border p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg ${panel}`}>
+              <article key={project._id} role="link" tabIndex={0} onClick={() => navigate(`/projects/${project._id}`)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(`/projects/${project._id}`); } }} className={`group flex min-h-[250px] cursor-pointer flex-col rounded-2xl border p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/30 ${panel}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="truncate text-lg font-bold">{project.title}</h3>
@@ -157,8 +158,8 @@ function Dashboard() {
                 <div className={`mt-auto flex items-center justify-between border-t pt-4 ${isDark ? "border-slate-800" : "border-slate-100"}`}>
                   <span className={`text-xs ${muted}`}>Project</span>
                   <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-                    <button type="button" onClick={() => openEdit(project)} className={`rounded-lg px-3 py-2 text-sm font-semibold text-indigo-600 transition ${isDark ? "hover:bg-slate-800" : "hover:bg-indigo-50"}`}>Edit <span aria-hidden="true">↗</span></button>
-                    <button type="button" onClick={() => { setError(""); setDeleteProject(project); }} aria-label={`Delete ${project.title}`} title="Delete project" className="rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
+                    <button type="button" onClick={(event) => { event.stopPropagation(); openEdit(project); }} className={`rounded-lg px-3 py-2 text-sm font-semibold text-indigo-600 transition ${isDark ? "hover:bg-slate-800" : "hover:bg-indigo-50"}`}>Edit <span aria-hidden="true">↗</span></button>
+                    <button type="button" onClick={(event) => { event.stopPropagation(); setError(""); setDeleteProject(project); }} aria-label={`Delete ${project.title}`} title="Delete project" className="rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
                   </div>
                 </div>
               </article>
@@ -216,6 +217,9 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
+
+
 
 
 

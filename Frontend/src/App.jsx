@@ -21,6 +21,7 @@ function App() {
         <Dashboard/>
       </ProtectedRoutes>
     }/>
+    <Route path="/projects/:id" element={<ProjectDetails />} />
   </Routes>
 </>
   )
