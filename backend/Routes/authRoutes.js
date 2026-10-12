@@ -4,6 +4,7 @@ import { completeGithubOAuth, login, logout, me, signup, startGithubOAuth, updat
 const router=e.Router();
 
 router.get("/auth/github",startGithubOAuth);
+router.get("/auth/github/link",verifyToken,startGithubOAuth);
 router.get("/auth/github/callback",completeGithubOAuth);
 router.post("/auth/signup",signup);
 router.post("/auth/login",login);

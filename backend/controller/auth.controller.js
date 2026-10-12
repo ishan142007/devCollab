@@ -2,10 +2,12 @@ import User from "../model/User.model.js";
 import bcrypt from "bcrypt";
 import jwt  from "jsonwebtoken";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { ensureUsername, getSafeUserProfile, isHttpsUrl, normalizeTechnologyTags } from "../utils/profile.js";
+import { ensureUsername, getSafeUserProfile, isGitHubProfileUrl, isHttpsUrl, normalizeTechnologyTags } from "../utils/profile.js";
 import { syncOwnedPublicRepositories } from "../services/githubDiscovery.service.js";
+import { linkGitHubIdentity } from "../services/githubAccountLink.service.js";
 
 const githubStateCookie = "github_oauth_state";
+const githubLinkIntentCookie = "github_oauth_link_intent";
 const isProduction = process.env.NODE_ENV === "production";
 
 const authCookieOptions = {
@@ -21,6 +23,10 @@ const redirectToLoginWithOAuthError = (res) => {
     return res.redirect(`${getFrontendUrl()}/login?oauth_error=github`);
 };
 
+const redirectToProfileWithOAuthError = (res, reason = "github_link") => {
+    return res.redirect(`${getFrontendUrl()}/profile?oauth_error=${reason}`);
+};
+
 const startGithubOAuth = (req, res) => {
     const { GITHUB_CLIENT_ID, GITHUB_CALLBACK_URL } = process.env;
     if (!GITHUB_CLIENT_ID || !GITHUB_CALLBACK_URL) {
@@ -28,13 +34,32 @@ const startGithubOAuth = (req, res) => {
     }
 
     const state = randomBytes(32).toString("hex");
-    res.cookie(githubStateCookie, state, {
+    const cookieOptions = {
         httpOnly: true,
         secure: isProduction,
         sameSite: "lax",
         maxAge: 10 * 60 * 1000,
         path: "/api/auth/github"
-    });
+    };
+    res.cookie(githubStateCookie, state, cookieOptions);
+    if (req.user?.id) {
+        if (!process.env.jwtSecretKey) {
+            return res.status(503).json({ message: "GitHub account linking is not configured on the server." });
+        }
+        const linkIntent = jwt.sign(
+            { purpose: "github_account_link", userId: String(req.user.id), state },
+            process.env.jwtSecretKey,
+            { expiresIn: "10m", audience: "github-oauth-link" }
+        );
+        res.cookie(githubLinkIntentCookie, linkIntent, cookieOptions);
+    } else {
+        res.clearCookie(githubLinkIntentCookie, {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: "lax",
+            path: "/api/auth/github"
+        });
+    }
 
     const params = new URLSearchParams({
         client_id: GITHUB_CLIENT_ID,
@@ -59,8 +84,18 @@ const logout = (_req, res) => {
 
 const completeGithubOAuth = async (req, res) => {
     const { code, state, error } = req.query;
-    const savedState = req.cookies[githubStateCookie];
+    const savedState = req.cookies?.[githubStateCookie];
+    const savedLinkIntent = req.cookies?.[githubLinkIntentCookie];
+    const oauthErrorRedirect = () => savedLinkIntent
+        ? redirectToProfileWithOAuthError(res)
+        : redirectToLoginWithOAuthError(res);
     res.clearCookie(githubStateCookie, {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: "lax",
+        path: "/api/auth/github"
+    });
+    res.clearCookie(githubLinkIntentCookie, {
         httpOnly: true,
         secure: isProduction,
         sameSite: "lax",
@@ -69,20 +104,37 @@ const completeGithubOAuth = async (req, res) => {
 
     if (error || typeof code !== "string" || typeof state !== "string" ||
         typeof savedState !== "string") {
-        return redirectToLoginWithOAuthError(res);
+        return oauthErrorRedirect();
     }
 
     const receivedState = Buffer.from(state);
     const expectedState = Buffer.from(savedState);
     if (receivedState.length !== expectedState.length ||
         !timingSafeEqual(receivedState, expectedState)) {
-        return redirectToLoginWithOAuthError(res);
+        return oauthErrorRedirect();
     }
 
     const { GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_CALLBACK_URL, jwtSecretKey, jwt_expire_in } = process.env;
     if (!GITHUB_CLIENT_ID || !GITHUB_CLIENT_SECRET || !GITHUB_CALLBACK_URL || !jwtSecretKey) {
         console.error("GitHub OAuth callback cannot complete because server configuration is missing.");
-        return redirectToLoginWithOAuthError(res);
+        return oauthErrorRedirect();
+    }
+
+    let linkUserId;
+    if (savedLinkIntent) {
+        try {
+            const intent = jwt.verify(savedLinkIntent, jwtSecretKey, { audience: "github-oauth-link" });
+            const session = req.cookies?.token
+                ? jwt.verify(req.cookies.token, jwtSecretKey)
+                : null;
+            if (intent.purpose !== "github_account_link" || intent.state !== state ||
+                !session?.id || String(session.id) !== String(intent.userId)) {
+                return redirectToProfileWithOAuthError(res, "github_link_session");
+            }
+            linkUserId = String(intent.userId);
+        } catch {
+            return redirectToProfileWithOAuthError(res, "github_link_session");
+        }
     }
 
     try {
@@ -110,18 +162,30 @@ const completeGithubOAuth = async (req, res) => {
             "X-GitHub-Api-Version": "2022-11-28",
             "User-Agent": "devCollab"
         };
-        const [profileResponse, emailsResponse] = await Promise.all([
-            fetch("https://api.github.com/user", { headers: githubHeaders }),
-            fetch("https://api.github.com/user/emails", { headers: githubHeaders })
-        ]);
-
-        if (!profileResponse.ok || !emailsResponse.ok) {
+        const profileResponse = await fetch("https://api.github.com/user", { headers: githubHeaders });
+        if (!profileResponse.ok) {
             throw new Error("GitHub could not provide the account profile.");
         }
 
         const profile = await profileResponse.json();
+        if (!profile.id || !profile.login || !isGitHubProfileUrl(profile.html_url)) {
+            throw new Error("GitHub returned an invalid account profile.");
+        }
+
+        if (linkUserId) {
+            const user = await linkGitHubIdentity({ userId: linkUserId, githubProfile: profile });
+            void syncOwnedPublicRepositories(user._id).catch((discoveryError) => {
+                console.error("GitHub repository discovery after account linking failed:", discoveryError.message);
+            });
+            return res.redirect(`${getFrontendUrl()}/profile?github_connected=1`);
+        }
+
+        const emailsResponse = await fetch("https://api.github.com/user/emails", { headers: githubHeaders });
+        if (!emailsResponse.ok) {
+            throw new Error("GitHub could not provide the account profile.");
+        }
         const emails = await emailsResponse.json();
-        if (!profile.id || !profile.login || !Array.isArray(emails)) {
+        if (!Array.isArray(emails)) {
             throw new Error("GitHub returned an invalid account profile.");
         }
 
@@ -143,12 +207,14 @@ const completeGithubOAuth = async (req, res) => {
                 email: verifiedEmail?.toLowerCase(),
                 avatar: profile.avatar_url,
                 githubId,
-                githubUsername: profile.login
+                githubUsername: profile.login,
+                githubProfileUrl: profile.html_url
             });
         } else {
             const wasConnected = Boolean(user.githubId);
             if (!wasConnected) user.githubId = githubId;
             user.githubUsername = profile.login;
+            user.githubProfileUrl = profile.html_url;
             if (!wasConnected && profile.avatar_url) user.avatar = profile.avatar_url;
             await user.save();
         }
@@ -165,6 +231,13 @@ const completeGithubOAuth = async (req, res) => {
         });
         return res.redirect(getFrontendUrl());
     } catch (oauthError) {
+        if (linkUserId) {
+            if (oauthError.status === 409) {
+                return redirectToProfileWithOAuthError(res, "github_link_conflict");
+            }
+            console.error("GitHub account linking failed:", oauthError.message);
+            return redirectToProfileWithOAuthError(res);
+        }
         console.error("GitHub OAuth sign-in failed:", oauthError.message);
         return redirectToLoginWithOAuthError(res);
     }
@@ -242,7 +315,7 @@ const signup=async(req,res)=>{
         const user=req.user.id;
         
         const checkUser = await User.findById(user).select(
-            "name username email avatar bio profileVisibility technologies githubId githubUsername"
+            "name username email avatar bio profileVisibility technologies githubId githubUsername githubProfileUrl"
         );
         if(!checkUser)return res.status(404).json({message:"user not found"});
         await ensureUsername(checkUser);
@@ -319,7 +392,7 @@ const updateMe = async (req, res) => {
         const updatedUser = await User.findByIdAndUpdate(req.user.id, update, {
             returnDocument: "after",
             runValidators: true
-        }).select("name username email avatar bio profileVisibility technologies githubId githubUsername");
+        }).select("name username email avatar bio profileVisibility technologies githubId githubUsername githubProfileUrl");
         if (!updatedUser) {
             return res.status(404).json({ message: "user not found" });
         }

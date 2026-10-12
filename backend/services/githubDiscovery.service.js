@@ -46,7 +46,11 @@ export const normalizeDiscoveredRepository = (repository, githubId, username, la
     };
 };
 
-export const syncOwnedPublicRepositories = async (userId) => {
+export const syncOwnedPublicRepositories = async (userId, {
+    UserModel = User,
+    DiscoveredRepositoryModel = DiscoveredRepository,
+    listRepositories = getPublicUserRepositories
+} = {}) => {
     const key = String(userId);
     if (activeSyncs.has(key)) {
         const error = new Error("A repository refresh is already in progress.");
@@ -59,7 +63,7 @@ export const syncOwnedPublicRepositories = async (userId) => {
     let user;
     try {
         const retryStaleLockBefore = new Date(Date.now() - SYNC_LOCK_LEASE_MS);
-        user = await User.findOneAndUpdate({
+        user = await UserModel.findOneAndUpdate({
             _id: userId,
             githubId: { $exists: true, $ne: null },
             githubUsername: { $type: "string", $ne: "" },
@@ -79,7 +83,7 @@ export const syncOwnedPublicRepositories = async (userId) => {
             }
         }, { returnDocument: "after" }).select("githubId githubUsername githubRepositorySync");
         if (!user?.githubId || !user.githubUsername) {
-            const existingUser = await User.findById(userId).select("githubId githubUsername githubRepositorySync");
+            const existingUser = await UserModel.findById(userId).select("githubId githubUsername githubRepositorySync");
             const error = new Error(existingUser?.githubId && existingUser?.githubUsername
                 ? "A repository refresh is already in progress."
                 : "Connect a GitHub account before discovering repositories.");
@@ -87,15 +91,15 @@ export const syncOwnedPublicRepositories = async (userId) => {
             throw error;
         }
 
-        const result = await getPublicUserRepositories(user.githubUsername);
+        const result = await listRepositories(user.githubUsername);
         const lastSeenAt = new Date();
         const repositories = result.items
             .map((item) => normalizeDiscoveredRepository(item, user.githubId, user.githubUsername, lastSeenAt))
             .filter(Boolean);
 
-        await DiscoveredRepository.init();
+        await DiscoveredRepositoryModel.init();
         if (repositories.length) {
-            await DiscoveredRepository.bulkWrite(repositories.map((repository) => ({
+            await DiscoveredRepositoryModel.bulkWrite(repositories.map((repository) => ({
                 updateOne: {
                     filter: { user: user._id, githubRepositoryId: repository.githubRepositoryId },
                     update: { $set: repository, $setOnInsert: { user: user._id } },
@@ -105,7 +109,7 @@ export const syncOwnedPublicRepositories = async (userId) => {
         }
 
         if (!result.truncated) {
-            await DiscoveredRepository.updateMany(
+            await DiscoveredRepositoryModel.updateMany(
                 { user: user._id, lastSeenAt: { $lt: lastSeenAt } },
                 { $set: { available: false } }
             );

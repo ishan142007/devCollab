@@ -1,13 +1,13 @@
 import User from "../model/User.model.js";
 import Project from "../model/Project.model.js";
 import ContributionEvidence from "../model/ContributionEvidence.model.js";
-import { ensureUsername, isHttpsUrl } from "../utils/profile.js";
+import { ensureUsername, isGitHubProfileUrl, isHttpsUrl } from "../utils/profile.js";
 
 export const getPublicProfile = async (req, res) => {
     try {
         const username = typeof req.params.username === "string" ? req.params.username.toLowerCase() : "";
         const user = await User.findOne({ username }).select(
-            "name username bio avatar profileVisibility technologies githubUsername"
+            "name username bio avatar profileVisibility technologies githubUsername githubProfileUrl"
         );
         if (!user || user.profileVisibility !== "public") {
             return res.status(404).json({ message: "profile not found" });
@@ -48,7 +48,11 @@ export const getPublicProfile = async (req, res) => {
                     avatar: isHttpsUrl(user.avatar) ? user.avatar : "",
                     technologies: user.technologies || [],
                     githubUsername: user.githubUsername || "",
-                    githubUrl: user.githubUsername ? `https://github.com/${encodeURIComponent(user.githubUsername)}` : ""
+                    githubUrl: isGitHubProfileUrl(user.githubProfileUrl)
+                        ? user.githubProfileUrl
+                        : user.githubUsername
+                            ? `https://github.com/${encodeURIComponent(user.githubUsername)}`
+                            : ""
                 },
                 projects: projects.map((project) => ({
                     id: String(project._id),
@@ -85,7 +89,7 @@ export const getPublicProfile = async (req, res) => {
 export const getMyProfile = async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select(
-            "name username bio avatar profileVisibility technologies githubId githubUsername"
+            "name username bio avatar profileVisibility technologies githubId githubUsername githubProfileUrl"
         );
         if (!user) return res.status(404).json({ message: "user not found" });
         await ensureUsername(user);

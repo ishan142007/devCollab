@@ -51,7 +51,13 @@ discoveredRepositorySchema.index(
   { unique: true },
 );
 discoveredRepositorySchema.index({ user: 1, available: 1, fullName: 1 });
-discoveredRepositorySchema.index({ linkedProject: 1 }, { unique: true, sparse: true });
+discoveredRepositorySchema.index(
+  { user: 1, linkedProject: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { linkedProject: { $type: "objectId" } },
+  },
+);
 
 const DiscoveredRepository = mongoose.model(
   "DiscoveredRepository",

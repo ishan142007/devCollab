@@ -26,6 +26,16 @@ export const isHttpsUrl = (value) => {
     }
 };
 
+export const isGitHubProfileUrl = (value) => {
+    try {
+        const url = new URL(value);
+        return url.protocol === "https:" && url.hostname === "github.com" &&
+            !url.username && !url.password && url.pathname.split("/").filter(Boolean).length === 1;
+    } catch {
+        return false;
+    }
+};
+
 export const ensureUsername = async (user) => {
     if (!user.username) {
         user.username = makeUsername(user.name, user._id);
@@ -44,5 +54,10 @@ export const getSafeUserProfile = (user) => ({
     profileVisibility: user.profileVisibility ?? "private",
     technologies: user.technologies ?? [],
     githubUsername: user.githubUsername ?? "",
+    githubProfileUrl: isGitHubProfileUrl(user.githubProfileUrl)
+        ? user.githubProfileUrl
+        : user.githubUsername
+            ? `https://github.com/${encodeURIComponent(user.githubUsername)}`
+            : "",
     githubConnected: Boolean(user.githubId)
 });

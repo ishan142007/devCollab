@@ -17,6 +17,7 @@ const UserSchema = new mongoose.Schema({
     },
     githubId: { type: String, unique: true, sparse: true },
     githubUsername: { type: String, trim: true, maxlength: 39 },
+    githubProfileUrl: { type: String, trim: true, maxlength: 2048 },
     githubRepositorySync: {
         status: { type: String, enum: ["never", "in_progress", "success", "partial", "failed"], default: "never" },
         startedAt: Date,

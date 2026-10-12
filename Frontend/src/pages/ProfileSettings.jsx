@@ -1,6 +1,6 @@
 import axios from "axios";
 import { useContext, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import AuthContext from "../context/AuthContext";
 import { apiUrl } from "../config/api";
 import useDashboardTheme from "../hooks/useDashboardTheme";
@@ -21,6 +21,7 @@ const EMPTY_PROFILE = {
 
 function ProfileSettings() {
   const { updateUser } = useContext(AuthContext);
+  const [searchParams] = useSearchParams();
   const { isDark } = useDashboardTheme();
   const [profile, setProfile] = useState(EMPTY_PROFILE);
   const [projects, setProjects] = useState([]);
@@ -36,6 +37,14 @@ function ProfileSettings() {
   const [activeProjectId, setActiveProjectId] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const oauthStatusMessage = searchParams.get("github_connected") === "1"
+    ? "GitHub has been linked to this DevCollab account."
+    : "";
+  const oauthErrorMessage = {
+    github_link_conflict: "This GitHub account is already linked to another DevCollab account, or this DevCollab account is linked to a different GitHub account. No account was changed.",
+    github_link_session: "Your DevCollab session could not be confirmed. Sign in again, then retry linking GitHub.",
+    github_link: "GitHub could not be linked. No DevCollab account was changed."
+  }[searchParams.get("oauth_error")] ?? "";
 
   const loadProfileData = async () => {
     const [userResponse, profileResponse, repositoryResponse] = await Promise.all([
@@ -379,13 +388,19 @@ function ProfileSettings() {
 
         {error && <p role="alert" className="mb-5 rounded-lg bg-rose-100 px-4 py-3 text-sm text-rose-800">{error}</p>}
         {message && <p role="status" className="mb-5 rounded-lg bg-emerald-100 px-4 py-3 text-sm text-emerald-800">{message}</p>}
+        {oauthStatusMessage && <p role="status" className="mb-5 rounded-lg bg-emerald-100 px-4 py-3 text-sm text-emerald-800">{oauthStatusMessage}</p>}
+        {oauthErrorMessage && <p role="alert" className="mb-5 rounded-lg bg-rose-100 px-4 py-3 text-sm text-rose-800">{oauthErrorMessage}</p>}
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div><h2 className="text-xl font-bold">Developer details</h2><p className="mt-1 text-sm text-slate-500">Your profile is private until you choose to publish it.</p></div>
             <div className="text-sm text-slate-600">GitHub {profile.githubConnected ? `connected as @${profile.githubUsername}` : "not connected"}</div>
           </div>
-          {!profile.githubConnected && <div className="mb-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900"><p>Connect through GitHub OAuth using an account with a verified email matching {profile.email || "your DevCollab account"}.</p><p className="mt-1">If the emails do not match, the existing OAuth flow may sign you into or create a different DevCollab account.</p><a href={`${API_ROOT}/auth/github`} className="mt-3 inline-block font-semibold underline">Continue with GitHub</a></div>}
+          <div className="mb-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+            <p>{profile.githubConnected ? "Reconnect" : "Connect"} by authorizing the GitHub account you want attached to this DevCollab account. Email matching is not required; this will not sign you into a different DevCollab account.</p>
+            <p className="mt-1">A GitHub identity already attached to another DevCollab account, or a different identity already attached here, will be rejected without changing either account.</p>
+            <a href={`${API_ROOT}/auth/github/link`} className="mt-3 inline-block font-semibold underline">{profile.githubConnected ? "Reconnect GitHub" : "Connect GitHub"}</a>
+          </div>
           <form onSubmit={saveProfile} className="grid gap-5 sm:grid-cols-2">
             <label className="text-sm font-medium">Display name<input required maxLength={80} value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5" /></label>
             <label className="text-sm font-medium">Profile visibility<select value={profile.profileVisibility} onChange={(event) => setProfile({ ...profile, profileVisibility: event.target.value })} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5"><option value="private">Private</option><option value="public">Public</option></select></label>
