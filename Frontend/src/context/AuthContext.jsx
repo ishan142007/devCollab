@@ -1,9 +1,10 @@
 import axios from 'axios';
 import {createContext,useState ,useEffect}from 'react'
 const AuthContext = createContext();  //yeh ek shared channel state create karta hai.
+const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const getCurrentUser = async () => {
-  const response = await axios.get("http://localhost:3000/api/auth/me", { withCredentials: true });
+  const response = await axios.get(`${apiUrl}/api/auth/me`, { withCredentials: true });
   return response.data.data;
 };
 

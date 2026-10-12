@@ -1,8 +1,10 @@
 import e from "express";
 import verifyToken from "../middleware/auth.middleware.js";
-import { login, me, signup, updateMe } from "../controller/auth.controller.js";
+import { completeGithubOAuth, login, me, signup, startGithubOAuth, updateMe } from "../controller/auth.controller.js";
 const router=e.Router();
 
+router.get("/auth/github",startGithubOAuth);
+router.get("/auth/github/callback",completeGithubOAuth);
 router.post("/auth/signup",signup);
 router.post("/auth/login",login);
 router.get("/auth/me",verifyToken,me)
