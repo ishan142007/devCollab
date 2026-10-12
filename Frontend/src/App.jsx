@@ -5,6 +5,8 @@ import { Route, Routes} from "react-router-dom";
 import ProtectedRoutes from "./components/ProtectedRoutes.jsx"
 import Dashboard from "./pages/Dashboard";
 import ProjectDetails from "./pages/ProjectDetails";
+import ProfileSettings from "./pages/ProfileSettings";
+import EvidenceProfile from "./pages/EvidenceProfile";
 
 function App() {
 
@@ -17,6 +19,12 @@ function App() {
   <Routes>
     <Route path="/login" element={<Login/>}/>
     <Route path="/signup" element={<Signup/>}/>
+    <Route path="/u/:username" element={<EvidenceProfile/>}/>
+    <Route path="/profile" element={
+      <ProtectedRoutes>
+        <ProfileSettings/>
+      </ProtectedRoutes>
+    }/>
     <Route path="/" element={
       <ProtectedRoutes>
         <Dashboard/>

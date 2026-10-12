@@ -1,0 +1,111 @@
+.evidence-profile-theme {
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.evidence-profile-theme.is-dark {
+  color-scheme: dark;
+  background-color: #020617;
+  color: #f1f5f9;
+}
+
+.evidence-profile-theme.is-dark .bg-white {
+  background-color: #0f172a !important;
+}
+
+.evidence-profile-theme.is-dark .bg-slate-50 {
+  background-color: #020617 !important;
+}
+
+.evidence-profile-theme.is-dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+.evidence-profile-theme.is-dark .bg-indigo-50 {
+  background-color: #1e1b4b !important;
+}
+
+.evidence-profile-theme.is-dark .bg-indigo-100 {
+  background-color: #312e81 !important;
+}
+
+.evidence-profile-theme.is-dark .bg-rose-100 {
+  background-color: #4c0519 !important;
+}
+
+.evidence-profile-theme.is-dark .hover\:bg-rose-50:hover {
+  background-color: #4c0519 !important;
+}
+
+.evidence-profile-theme.is-dark .bg-amber-50 {
+  background-color: #451a03 !important;
+}
+
+.evidence-profile-theme.is-dark .bg-emerald-100 {
+  background-color: #022c22 !important;
+}
+
+.evidence-profile-theme.is-dark .text-slate-900,
+.evidence-profile-theme.is-dark .text-slate-800 {
+  color: #f1f5f9 !important;
+}
+
+.evidence-profile-theme.is-dark .text-slate-700,
+.evidence-profile-theme.is-dark .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+.evidence-profile-theme.is-dark .text-slate-500,
+.evidence-profile-theme.is-dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+.evidence-profile-theme.is-dark .text-indigo-700 {
+  color: #a5b4fc !important;
+}
+
+.evidence-profile-theme.is-dark .text-indigo-600 {
+  color: #818cf8 !important;
+}
+
+.evidence-profile-theme.is-dark .text-rose-800 {
+  color: #fda4af !important;
+}
+
+.evidence-profile-theme.is-dark .text-rose-700 {
+  color: #fda4af !important;
+}
+
+.evidence-profile-theme.is-dark .text-amber-800,
+.evidence-profile-theme.is-dark .text-amber-900 {
+  color: #fcd34d !important;
+}
+
+.evidence-profile-theme.is-dark .text-emerald-800 {
+  color: #6ee7b7 !important;
+}
+
+.evidence-profile-theme.is-dark .border-slate-200,
+.evidence-profile-theme.is-dark .border-slate-300 {
+  border-color: #334155 !important;
+}
+
+.evidence-profile-theme.is-dark .border-rose-300 {
+  border-color: #9f1239 !important;
+}
+
+.evidence-profile-theme.is-dark input,
+.evidence-profile-theme.is-dark textarea,
+.evidence-profile-theme.is-dark select {
+  border-color: #475569;
+  background-color: #020617;
+  color: #f1f5f9;
+}
+
+.evidence-profile-theme.is-dark input::placeholder,
+.evidence-profile-theme.is-dark textarea::placeholder {
+  color: #64748b;
+}
+
+.evidence-profile-theme.is-dark button:disabled {
+  color: #94a3b8;
+}

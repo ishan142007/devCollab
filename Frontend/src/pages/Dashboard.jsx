@@ -5,7 +5,7 @@ import DashboardSidebar from "../components/DashboardSidebar";
 import AuthContext from "../context/AuthContext";
 
 const API_URL = "http://localhost:3000/api/project";
-const EMPTY_FORM = { title: "", description: "", status: "Active" };
+const EMPTY_FORM = { title: "", description: "", status: "Active", technologies: "", visibility: "private", featured: false };
 const STATUSES = ["Active", "Completed", "Archived"];
 const NAV_ITEMS = [
   { label: "Overview", icon: "⌂" },
@@ -19,7 +19,7 @@ const emptyProfileForm = (user) => ({ name: user?.name ?? "", email: user?.email
 
 function Dashboard() {
   const navigate = useNavigate();
-  const { User, updateUser } = useContext(AuthContext);
+  const { User, updateUser, logout } = useContext(AuthContext);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -35,6 +35,8 @@ function Dashboard() {
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileMessage, setProfileMessage] = useState("");
+  const [logoutError, setLogoutError] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
   const taskRequestRef = useRef(0);
   const [showCreate, setShowCreate] = useState(false);
   const [editProject, setEditProject] = useState(null);
@@ -93,7 +95,14 @@ function Dashboard() {
   const openCreate = () => { setError(""); setForm(EMPTY_FORM); setShowCreate(true); };
   const openEdit = (project) => {
     setError("");
-    setForm({ title: project.title ?? "", description: project.description ?? "", status: project.status ?? "Active" });
+    setForm({
+      title: project.title ?? "",
+      description: project.description ?? "",
+      status: project.status ?? "Active",
+      technologies: (project.technologies ?? []).join(", "),
+      visibility: project.visibility ?? "private",
+      featured: Boolean(project.featured)
+    });
     setEditProject(project);
   };
 
@@ -115,6 +124,19 @@ function Dashboard() {
       setProfileError(err.response?.data?.message || "Couldn't update your profile. Please try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    setLogoutError("");
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } catch (err) {
+      setLogoutError(err.response?.data?.message || "Couldn't log out. Please try again.");
+    } finally {
+      setLoggingOut(false);
     }
   };
 
@@ -147,12 +169,16 @@ function Dashboard() {
     setSaving(true);
     setError("");
     try {
+      const payload = {
+        ...form,
+        technologies: form.technologies.split(",").map((tag) => tag.trim()).filter(Boolean)
+      };
       if (editProject) {
-        const { data } = await axios.patch(`${API_URL}/${editProject._id}`, form, { withCredentials: true });
+        const { data } = await axios.patch(`${API_URL}/${editProject._id}`, payload, { withCredentials: true });
         const updated = data.updatedProject;
         setProjects((current) => current.map((project) => project._id === updated._id ? updated : project));
       } else {
-        const { data } = await axios.post(API_URL, form, { withCredentials: true });
+        const { data } = await axios.post(API_URL, payload, { withCredentials: true });
         setProjects((current) => [data.project, ...current]);
       }
       closeDialog();
@@ -274,16 +300,23 @@ function Dashboard() {
                 <div className={`rounded-2xl border p-6 sm:p-8 ${panel}`}>
                   <div className="flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
                     <div className="flex items-center gap-4">{User?.avatar ? <img src={User.avatar} alt={`${User?.name || "User"} avatar`} className="h-20 w-20 rounded-2xl object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-indigo-100 text-2xl font-bold text-indigo-700">{initials(User?.name)}</div>}<div><h3 className="text-xl font-bold">{User?.name || "Your name"}</h3><p className={`mt-1 ${muted}`}>{User?.email}</p></div></div>
-                    {!editingProfile && <button type="button" onClick={() => { setProfileForm(emptyProfileForm(User)); setProfileError(""); setProfileMessage(""); setEditingProfile(true); }} className={`rounded-lg border px-4 py-2.5 text-sm font-semibold ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-slate-300 hover:bg-slate-50"}`}>Edit profile</button>}
+                    <div className="flex flex-wrap gap-2">
+                      {!editingProfile && <button type="button" onClick={() => { setProfileForm(emptyProfileForm(User)); setProfileError(""); setProfileMessage(""); setEditingProfile(true); }} className={`rounded-lg border px-4 py-2.5 text-sm font-semibold ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-slate-300 hover:bg-slate-50"}`}>Edit profile</button>}
+                      <button type="button" onClick={handleLogout} disabled={loggingOut} className={`rounded-lg border px-4 py-2.5 text-sm font-semibold disabled:opacity-60 ${isDark ? "border-rose-900 text-rose-300 hover:bg-rose-950" : "border-rose-300 text-rose-700 hover:bg-rose-50"}`}>
+                        {loggingOut ? "Logging out…" : "Log out"}
+                      </button>
+                    </div>
                   </div>
+                  {logoutError && <p role="alert" className="mt-5 rounded-lg bg-rose-100 px-4 py-3 text-sm text-rose-800">{logoutError}</p>}
                   {profileMessage && <p role="status" className="mt-5 rounded-lg bg-emerald-100 px-4 py-3 text-sm text-emerald-800">{profileMessage}</p>}
                   {editingProfile && <form onSubmit={saveProfile} className="mt-6 space-y-5">
-                    <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>Full name<input required maxLength={100} value={profileForm.name} onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))} autoComplete="name" className={`mt-2 w-full rounded-lg border px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 ${isDark ? "border-slate-700 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-900"}`} /></label>
+                    <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>Full name<input required maxLength={80} value={profileForm.name} onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))} autoComplete="name" className={`mt-2 w-full rounded-lg border px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 ${isDark ? "border-slate-700 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-900"}`} /></label>
                     <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>Email address<input required type="email" value={profileForm.email} onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))} autoComplete="email" className={`mt-2 w-full rounded-lg border px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 ${isDark ? "border-slate-700 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-900"}`} /></label>
                     <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>Avatar image URL <span className={`font-normal ${muted}`}>(optional)</span><input type="url" value={profileForm.avatar} onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.value }))} placeholder="https://example.com/avatar.jpg" className={`mt-2 w-full rounded-lg border px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 ${isDark ? "border-slate-700 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-900"}`} /></label>
                     {profileError && <p role="alert" className="rounded-lg bg-rose-100 px-4 py-3 text-sm text-rose-800">{profileError}</p>}
                     <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" disabled={saving} onClick={() => { setEditingProfile(false); setProfileForm(emptyProfileForm(User)); setProfileError(""); }} className={`rounded-lg border px-4 py-2.5 text-sm font-semibold ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-slate-300 hover:bg-slate-50"}`}>Cancel</button><button type="submit" disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">{saving ? "Saving…" : "Save profile"}</button></div>
                   </form>}
+                  {!editingProfile && <div className="mt-6"><p className={`text-sm ${muted}`}>{User?.bio || "Add a short developer bio, technology tags, and manage project evidence."}</p><button type="button" onClick={() => navigate("/profile")} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">Manage evidence profile</button></div>}
                 </div>
               </div>
             )}
@@ -334,6 +367,15 @@ function Dashboard() {
                     {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
                   </select>
                 </label>
+                <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>Technologies <span className={`font-normal ${muted}`}>(comma-separated)</span>
+                 <input value={form.technologies} onChange={(e) => setForm({ ...form, technologies: e.target.value })} placeholder="React, Node.js, MongoDB" className={`mt-2 w-full rounded-lg border px-3 py-2.5 outline-none focus:border-indigo-500 ${isDark ? "border-slate-700 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-900"}`} />
+                </label>
+                <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>Project visibility
+                 <select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value })} className={`mt-2 w-full rounded-lg border px-3 py-2.5 outline-none focus:border-indigo-500 ${isDark ? "border-slate-700 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-900"}`}>
+                   <option value="private">Private</option><option value="public">Public</option>
+                 </select>
+                </label>
+                <label className={`flex items-center gap-2 text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}><input type="checkbox" checked={form.featured} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />Feature on my public profile</label>
               </div>
               {error && <p role="alert" className="mt-4 rounded-lg bg-rose-100 px-3 py-2 text-sm text-rose-800">{error}</p>}
               <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

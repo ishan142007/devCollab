@@ -2,6 +2,8 @@ import User from "../model/User.model.js";
 import bcrypt from "bcrypt";
 import jwt  from "jsonwebtoken";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { ensureUsername, getSafeUserProfile, isHttpsUrl, normalizeTechnologyTags } from "../utils/profile.js";
+import { syncOwnedPublicRepositories } from "../services/githubDiscovery.service.js";
 
 const githubStateCookie = "github_oauth_state";
 const isProduction = process.env.NODE_ENV === "production";
@@ -43,6 +45,16 @@ const startGithubOAuth = (req, res) => {
     });
 
     return res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`);
+};
+
+const logout = (_req, res) => {
+    res.clearCookie("token", {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
+        path: "/"
+    });
+    return res.status(200).json({ message: "Logged out successfully." });
 };
 
 const completeGithubOAuth = async (req, res) => {
@@ -130,13 +142,17 @@ const completeGithubOAuth = async (req, res) => {
                 name: profile.name?.trim() || profile.login,
                 email: verifiedEmail?.toLowerCase(),
                 avatar: profile.avatar_url,
-                githubId
+                githubId,
+                githubUsername: profile.login
             });
-        } else if (!user.githubId) {
-            user.githubId = githubId;
-            if (profile.avatar_url) user.avatar = profile.avatar_url;
+        } else {
+            const wasConnected = Boolean(user.githubId);
+            if (!wasConnected) user.githubId = githubId;
+            user.githubUsername = profile.login;
+            if (!wasConnected && profile.avatar_url) user.avatar = profile.avatar_url;
             await user.save();
         }
+        await ensureUsername(user);
 
         const token = jwt.sign(
             { id: user._id, email: user.email },
@@ -144,6 +160,9 @@ const completeGithubOAuth = async (req, res) => {
             { expiresIn: jwt_expire_in || "7d" }
         );
         res.cookie("token", token, authCookieOptions);
+        void syncOwnedPublicRepositories(user._id).catch((discoveryError) => {
+            console.error("Initial public GitHub repository discovery failed:", discoveryError.message);
+        });
         return res.redirect(getFrontendUrl());
     } catch (oauthError) {
         console.error("GitHub OAuth sign-in failed:", oauthError.message);
@@ -154,20 +173,27 @@ const completeGithubOAuth = async (req, res) => {
 const signup=async(req,res)=>{
     try {
        
-        const {name ,email,password,avatar}=req.body;
-        if(!name||!email||!password){
+        const {name ,email,password,avatar}=req.body ?? {};
+        if(typeof name !== "string" || !name.trim() || name.trim().length > 80 ||
+            typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ||
+            typeof password !== "string" || !password ||
+            (avatar !== undefined && (typeof avatar !== "string" ||
+                avatar.trim().length > 2048 ||
+                (avatar.trim() && !isHttpsUrl(avatar.trim()))))){
             return res.status(400).json({message:"enter valid details"});
         }
-        const validEmail=await User.findOne({email});
+        const normalizedEmail = email.trim().toLowerCase();
+        const validEmail=await User.findOne({email: normalizedEmail});
         if(validEmail)return res.status(400).json({message:"email already present "});
         const hashedPassword= await bcrypt.hash(password,10);
         
-        const user=await User.create({
-            name,
-            email,
+        const user = new User({
+            name: name.trim(),
+            email: normalizedEmail,
             password:hashedPassword,
-            avatar
+            avatar: avatar?.trim() || ""
         });
+        await ensureUsername(user);
         const token=jwt.sign({
             id:user._id,
             email:user.email
@@ -187,8 +213,9 @@ const signup=async(req,res)=>{
     try {
         const {email,password}=req.body;
             if(!password||!email) return res.status(400).json({message:"credentails not found "});
-        const user=await User.findOne({email});
+        const user=await User.findOne({email: email.trim().toLowerCase()}).select("+password");
         if(!user)return res.status(404).json({message:"user not found "});
+        if(!user.password)return res.status(400).json({message:"this account does not have a password login"});
         const ismatch=await bcrypt.compare(password,user.password);
         if(!ismatch)return res.status(400).json({message:"password is incorrect "});
         const token=jwt.sign(
@@ -214,10 +241,12 @@ const signup=async(req,res)=>{
         if(!req.user)return res.status(400).json({message:"request cant be completed"});
         const user=req.user.id;
         
-        const checkUser =await User.findById(user).select("name email avatar");
-        // console.log("debug")
+        const checkUser = await User.findById(user).select(
+            "name username email avatar bio profileVisibility technologies githubId githubUsername"
+        );
         if(!checkUser)return res.status(404).json({message:"user not found"});
-        return res.status(200).json({data:checkUser});
+        await ensureUsername(checkUser);
+        return res.status(200).json({data:getSafeUserProfile(checkUser)});
     } catch (error) {
         return res.status(500).json({message:"internal server error",error:error.message})
     }
@@ -225,26 +254,56 @@ const signup=async(req,res)=>{
 
 const updateMe = async (req, res) => {
     try {
-        const { name, email, avatar } = req.body ?? {};
+        const body = req.body;
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+            return res.status(400).json({ message: "profile changes must be an object" });
+        }
+        const allowedFields = new Set(["name", "email", "avatar", "bio", "profileVisibility", "technologies"]);
+        const unknownFields = Object.keys(body).filter((field) => !allowedFields.has(field));
+        if (unknownFields.length) {
+            return res.status(400).json({ message: "one or more profile fields cannot be changed" });
+        }
+        const { name, email, avatar, bio, profileVisibility, technologies } = body;
         const update = {};
 
         if (name !== undefined) {
-            if (typeof name !== "string" || !name.trim()) {
-                return res.status(400).json({ message: "name is required" });
+            if (typeof name !== "string" || !name.trim() || name.trim().length > 80) {
+                return res.status(400).json({ message: "name must contain 1 to 80 characters" });
             }
             update.name = name.trim();
         }
         if (email !== undefined) {
-            if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+            if (typeof email !== "string" || email.trim().length > 254 ||
+                !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
                 return res.status(400).json({ message: "enter a valid email address" });
             }
             update.email = email.trim().toLowerCase();
         }
         if (avatar !== undefined) {
-            if (typeof avatar !== "string") {
+            if (typeof avatar !== "string" || avatar.trim().length > 2048 ||
+                (avatar.trim() && !isHttpsUrl(avatar.trim()))) {
                 return res.status(400).json({ message: "avatar must be a URL" });
             }
             update.avatar = avatar.trim();
+        }
+        if (bio !== undefined) {
+            if (typeof bio !== "string" || bio.trim().length > 280) {
+                return res.status(400).json({ message: "bio must be at most 280 characters" });
+            }
+            update.bio = bio.trim();
+        }
+        if (profileVisibility !== undefined) {
+            if (!["public", "private"].includes(profileVisibility)) {
+                return res.status(400).json({ message: "profile visibility must be public or private" });
+            }
+            update.profileVisibility = profileVisibility;
+        }
+        if (technologies !== undefined) {
+            const normalizedTags = normalizeTechnologyTags(technologies);
+            if (!normalizedTags) {
+                return res.status(400).json({ message: "technologies must be a list of up to 20 tags, each 1 to 40 characters" });
+            }
+            update.technologies = normalizedTags;
         }
         if (Object.keys(update).length === 0) {
             return res.status(400).json({ message: "please send valid profile changes" });
@@ -260,15 +319,17 @@ const updateMe = async (req, res) => {
         const updatedUser = await User.findByIdAndUpdate(req.user.id, update, {
             returnDocument: "after",
             runValidators: true
-        }).select("name email avatar");
+        }).select("name username email avatar bio profileVisibility technologies githubId githubUsername");
         if (!updatedUser) {
             return res.status(404).json({ message: "user not found" });
         }
 
-        return res.status(200).json({ message: "profile updated", data: updatedUser });
+        await ensureUsername(updatedUser);
+        return res.status(200).json({ message: "profile updated", data: getSafeUserProfile(updatedUser) });
     } catch (error) {
-        return res.status(500).json({ message: "could not update profile", error: error.message });
+        console.error("Could not update profile:", error.message);
+        return res.status(500).json({ message: "could not update profile" });
     }
 };
 
-export {signup,login,me,updateMe,startGithubOAuth,completeGithubOAuth};
+export {signup,login,logout,me,updateMe,startGithubOAuth,completeGithubOAuth};

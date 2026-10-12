@@ -10,7 +10,7 @@ const verifyToken=async(req,res,next)=>{
         req.user=decoded;
         next();
     } catch (error) {
-        return res.status(500).json({message:"invalid token",error:error.message});
+        return res.status(401).json({message:"invalid or expired session"});
     }
 }
 export default verifyToken;

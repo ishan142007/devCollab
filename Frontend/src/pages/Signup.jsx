@@ -88,7 +88,7 @@ const Signup = () => {
 
             <div className="space-y-2">
               <label htmlFor="signup-name" className="block text-sm font-medium text-slate-200">Your name</label>
-              <input id="signup-name" type="text" placeholder="Alex Morgan" value={name} onChange={(e) => setname(e.target.value)} autoComplete="name" className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-white placeholder-slate-500 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10" />
+              <input id="signup-name" type="text" maxLength={80} placeholder="Alex Morgan" value={name} onChange={(e) => setname(e.target.value)} autoComplete="name" className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-3 text-white placeholder-slate-500 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10" />
             </div>
 
             <div className="space-y-2">

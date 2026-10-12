@@ -1,11 +1,15 @@
 import axios from 'axios';
-import {createContext,useState ,useEffect}from 'react'
+import {createContext,useState ,useEffect,useCallback}from 'react'
+import { apiUrl } from "../config/api";
 const AuthContext = createContext();  //yeh ek shared channel state create karta hai.
-const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const getCurrentUser = async () => {
   const response = await axios.get(`${apiUrl}/api/auth/me`, { withCredentials: true });
   return response.data.data;
+};
+
+const logoutUser = async () => {
+  await axios.post(`${apiUrl}/api/auth/logout`, {}, { withCredentials: true });
 };
 
 //createing the provider 
@@ -43,12 +47,16 @@ export const AuthProvider=({children})=>{
       cancelled = true;
     };
 }, []);
+const updateUser = useCallback((user) => setUser(user), []);
+const logout = useCallback(async () => {
+  await logoutUser();
+  setUser(null);
+}, []);
+
 if(loading)return <h1>.....loading.....</h1>
-  
-  const updateUser = (user) => setUser(user);
 
   return (
-  <AuthContext.Provider value={{User,loading,checkAuth,updateUser}}>
+  <AuthContext.Provider value={{User,loading,checkAuth,updateUser,logout}}>
     {children}
   </AuthContext.Provider>
 
