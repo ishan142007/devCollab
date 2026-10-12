@@ -1,19 +1,40 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import AuthContext from "../context/AuthContext";
 
 const API_URL = "http://localhost:3000/api/project";
 const EMPTY_FORM = { title: "", description: "", status: "Active" };
 const STATUSES = ["Active", "Completed", "Archived"];
+const NAV_ITEMS = [
+  { label: "Overview", icon: "⌂" },
+  { label: "Projects", icon: "▣" },
+  { label: "Tasks", icon: "✓" },
+  { label: "Reports", icon: "◫" },
+  { label: "Settings", icon: "⚙" },
+];
+const PROFILE_API_URL = "http://localhost:3000/api/auth/me";
+const emptyProfileForm = (user) => ({ name: user?.name ?? "", email: user?.email ?? "", avatar: user?.avatar ?? "" });
 
 function Dashboard() {
   const navigate = useNavigate();
+  const { User, updateUser } = useContext(AuthContext);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  // const [deletingProjectId, setDeletingProjectId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [theme, setTheme] = useState(() => localStorage.getItem("dashboard-theme") || "light");
+  const [activeTab, setActiveTab] = useState("Overview");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("dashboard-sidebar-collapsed") === "true");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [tasks, setTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState("");
+  const [profileForm, setProfileForm] = useState(() => emptyProfileForm(User));
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileMessage, setProfileMessage] = useState("");
+  const taskRequestRef = useRef(0);
   const [showCreate, setShowCreate] = useState(false);
   const [editProject, setEditProject] = useState(null);
   const [deleteProject, setDeleteProject] = useState(null);
@@ -37,6 +58,29 @@ function Dashboard() {
     localStorage.setItem("dashboard-theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    localStorage.setItem("dashboard-sidebar-collapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+
+  const loadWorkspaceTasks = async () => {
+    const requestId = ++taskRequestRef.current;
+    setTasksLoading(true);
+    setTasksError("");
+    try {
+      const projectTasks = await Promise.all(projects.map(async (project) => {
+        const { data } = await axios.get(`${API_URL}/${project._id}/task`, { withCredentials: true });
+        return (data.tasks ?? []).map((task) => ({ ...task, projectId: project._id, projectTitle: project.title }));
+      }));
+      if (taskRequestRef.current === requestId) setTasks(projectTasks.flat());
+    } catch (err) {
+      if (taskRequestRef.current === requestId) {
+        setTasksError(err.response?.data?.message || "Couldn't load workspace tasks.");
+      }
+    } finally {
+      if (taskRequestRef.current === requestId) setTasksLoading(false);
+    }
+  };
+
   const closeDialog = () => {
     setShowCreate(false);
     setEditProject(null);
@@ -50,6 +94,51 @@ function Dashboard() {
     setError("");
     setForm({ title: project.title ?? "", description: project.description ?? "", status: project.status ?? "Active" });
     setEditProject(project);
+  };
+
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setProfileError("");
+    setProfileMessage("");
+    try {
+      const { data } = await axios.patch(PROFILE_API_URL, {
+        name: profileForm.name.trim(),
+        email: profileForm.email.trim(),
+        avatar: profileForm.avatar.trim()
+      }, { withCredentials: true });
+      updateUser(data.data);
+      setEditingProfile(false);
+      setProfileMessage("Your profile has been updated.");
+    } catch (err) {
+      setProfileError(err.response?.data?.message || "Couldn't update your profile. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectTab = (tab) => {
+    setActiveTab(tab);
+    setMobileNavOpen(false);
+    setError("");
+    if (tab === "Tasks" || tab === "Reports") loadWorkspaceTasks();
+    if (tab === "Profile") {
+      setProfileMessage("");
+      setProfileError("");
+    }
+  };
+
+  const initials = (name) => (name || "User").trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
+  const projectStats = {
+    active: projects.filter((project) => (project.status || "Active") === "Active").length,
+    completed: projects.filter((project) => project.status === "Completed").length,
+    archived: projects.filter((project) => project.status === "Archived").length
+  };
+  const taskStats = {
+    total: tasks.length,
+    active: tasks.filter((task) => task.status === "Active").length,
+    pending: tasks.filter((task) => task.status === "Pending").length,
+    completed: tasks.filter((task) => task.status === "Completed").length
   };
 
   const saveProject = async (event) => {
@@ -88,21 +177,6 @@ function Dashboard() {
     }
   };
 
-  // const handleDelete = async (projectId) => {
-  //   if (!window.confirm("Are you sure you want to delete this project?")) return;
-
-  //   setDeletingProjectId(projectId);
-  //   setError("");
-  //   try {
-  //     await axios.delete(`${API_URL}/${projectId}`, { withCredentials: true });
-  //     setProjects((current) => current.filter((project) => project._id !== projectId));
-  //   } catch (err) {
-  //     setError(err.response?.data?.message || "We couldn't delete the project. Please try again.");
-  //   } finally {
-  //     setDeletingProjectId(null);
-  //   }
-  // };
-
   if (loading) {
     return (
       <main className={`flex min-h-screen items-center justify-center ${surface}`}>
@@ -118,71 +192,118 @@ function Dashboard() {
 
   return (
     <main className={`min-h-screen transition-colors duration-200 ${surface}`}>
-      <header className={`border-b ${isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wider text-indigo-500">Workspace</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">Projects</h1>
+      {mobileNavOpen && <button aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} className="fixed inset-0 z-30 bg-slate-950/50 md:hidden" />}
+      <div className="flex min-h-screen">
+        <aside className={`fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 flex-col border-r px-4 py-6 transition-all duration-200 md:sticky md:top-0 md:z-10 md:h-screen md:translate-x-0 ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} ${sidebarCollapsed ? "md:w-[5.5rem]" : "md:w-72"} ${isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+          <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "gap-3 px-2"} pb-8`}>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-lg font-bold text-white shadow-lg shadow-indigo-600/20">D</div>
+            {!sidebarCollapsed && <div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-indigo-500">Dev</p><h1 className="text-lg font-bold">Collab</h1></div>}
           </div>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setTheme(isDark ? "light" : "dark")} aria-label={`Switch to ${isDark ? "light" : "dark"} mode`} title={`Switch to ${isDark ? "light" : "dark"} mode`}
-              className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${isDark ? "border-slate-700 bg-slate-800 text-amber-300 hover:bg-slate-700" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"}`}>
-              {isDark ? (
-                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5"><circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.8"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-              ) : (
-                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-5 w-5"><path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="m16.5 4 .45 1.35L18.3 6l-1.35.45L16.5 7.8l-.45-1.35L14.7 6l1.35-.65L16.5 4Z" fill="currentColor"/></svg>
-              )}
-            </button>
-            <button onClick={openCreate} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-300">
-              <span aria-hidden="true" className="mr-2">＋</span>New project
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
-        <div className="mb-6 flex items-end justify-between">
-          <div><h2 className="text-lg font-semibold">All projects</h2><p className={`mt-1 text-sm ${muted}`}>Keep track of work and project status.</p></div>
-          <span className={`rounded-full px-3 py-1 text-sm font-medium ${isDark ? "bg-slate-800 text-slate-300" : "bg-slate-200 text-slate-700"}`}>
-            {projects.length} {projects.length === 1 ? "project" : "projects"}
-          </span>
-        </div>
-
-        {error && !dialogOpen && <p role="alert" className="mb-5 rounded-lg bg-rose-100 px-4 py-3 text-sm text-rose-800">{error}</p>}
-        {projects.length === 0 ? (
-          <div className={`rounded-2xl border border-dashed px-6 py-16 text-center ${panel}`}>
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-2xl text-indigo-700" aria-hidden="true">✦</div>
-            <h3 className="mt-4 text-lg font-semibold">No projects yet</h3>
-            <p className={`mx-auto mt-2 max-w-sm text-sm ${muted}`}>Create your first project to organize work and follow its progress.</p>
-            <button onClick={openCreate} className="mt-5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">Create a project</button>
-          </div>
-        ) : (
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => (
-              <article key={project._id} role="link" tabIndex={0} onClick={() => navigate(`/projects/${project._id}`)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(`/projects/${project._id}`); } }} className={`group flex min-h-[250px] cursor-pointer flex-col rounded-2xl border p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/30 ${panel}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-lg font-bold">{project.title}</h3>
-                    <span className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${project.status === "Completed" ? (isDark ? "bg-blue-950 text-blue-300" : "bg-blue-50 text-blue-700") : project.status === "Archived" ? (isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600") : (isDark ? "bg-emerald-950 text-emerald-300" : "bg-emerald-50 text-emerald-700")}`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${project.status === "Completed" ? "bg-blue-500" : project.status === "Archived" ? "bg-slate-400" : "bg-emerald-500"}`} />
-                      {project.status || "Active"}
-                    </span>
-                  </div>
-                  <div aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">◈</div>
-                </div>
-                <p className={`mt-4 line-clamp-3 min-h-[4.5rem] text-sm leading-6 ${muted}`}>{project.description || "No description added yet."}</p>
-                <div className={`mt-auto flex items-center justify-between border-t pt-4 ${isDark ? "border-slate-800" : "border-slate-100"}`}>
-                  <span className={`text-xs ${muted}`}>Project</span>
-                  <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-                    <button type="button" onClick={(event) => { event.stopPropagation(); openEdit(project); }} className={`rounded-lg px-3 py-2 text-sm font-semibold text-indigo-600 transition ${isDark ? "hover:bg-slate-800" : "hover:bg-indigo-50"}`}>Edit <span aria-hidden="true">↗</span></button>
-                    <button type="button" onClick={(event) => { event.stopPropagation(); setError(""); setDeleteProject(project); }} aria-label={`Delete ${project.title}`} title="Delete project" className="rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
-                  </div>
-                </div>
-              </article>
+          <nav aria-label="Dashboard navigation" className="space-y-2">
+            {NAV_ITEMS.map(({ label, icon }) => (
+              <button type="button" key={label} onClick={() => selectTab(label)} title={sidebarCollapsed ? label : undefined} aria-current={activeTab === label ? "page" : undefined}
+                className={`flex w-full items-center rounded-xl py-2.5 text-sm font-medium transition ${sidebarCollapsed ? "justify-center px-2" : "gap-3 px-3 text-left"} ${activeTab === label ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/25" : isDark ? "text-slate-300 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}>
+                <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-base font-semibold">{icon}</span>
+                {!sidebarCollapsed && label}
+              </button>
             ))}
-          </div>
-        )}
-      </section>
+          </nav>
+          <button type="button" onClick={() => selectTab("Profile")} title={sidebarCollapsed ? "Open profile" : undefined}
+            className={`mt-auto flex items-center rounded-xl border p-2 transition ${sidebarCollapsed ? "justify-center" : "gap-3"} ${isDark ? "border-slate-800 bg-slate-950 hover:bg-slate-800" : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}>
+            {User?.avatar ? <img src={User.avatar} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">{initials(User?.name)}</span>}
+            {!sidebarCollapsed && <span className="min-w-0 text-left"><span className="block truncate text-sm font-semibold">{User?.name || "Your profile"}</span><span className={`block truncate text-xs ${muted}`}>View profile</span></span>}
+          </button>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className={`sticky top-0 z-20 border-b ${isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+            <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4 sm:px-8">
+              <div className="flex min-w-0 items-center gap-3">
+                <button type="button" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation" className={`flex h-10 w-10 items-center justify-center rounded-xl border md:hidden ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-slate-200 hover:bg-slate-100"}`}><span aria-hidden="true">☰</span></button>
+                <button type="button" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} className={`hidden h-10 w-10 items-center justify-center rounded-xl border md:flex ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-slate-200 hover:bg-slate-100"}`}><span aria-hidden="true">{sidebarCollapsed ? "»" : "«"}</span></button>
+                <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wider text-indigo-500">Workspace</p><h1 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{activeTab}</h1></div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                {["Overview", "Projects"].includes(activeTab) && <button onClick={openCreate} className="rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 sm:px-4"><span aria-hidden="true" className="mr-1 sm:mr-2">＋</span><span className="hidden sm:inline">New project</span><span className="sm:hidden">New</span></button>}
+              </div>
+            </div>
+          </header>
+
+          <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-7 sm:px-8 sm:py-10">
+            {error && !dialogOpen && <p role="alert" className="mb-5 rounded-lg bg-rose-100 px-4 py-3 text-sm text-rose-800">{error}</p>}
+
+            {activeTab === "Overview" && (
+              <div className="mb-8 grid gap-4 sm:grid-cols-3">
+                {[["Total projects", projects.length, "▣"], ["Active", projectStats.active, "◷"], ["Completed", projectStats.completed, "✓"]].map(([label, value, icon]) => (
+                  <article key={label} className={`rounded-2xl border p-5 ${panel}`}><div className="flex items-center justify-between"><p className={`text-sm font-medium ${muted}`}>{label}</p><span className="text-xl text-indigo-500" aria-hidden="true">{icon}</span></div><p className="mt-3 text-3xl font-bold">{value}</p></article>
+                ))}
+              </div>
+            )}
+
+            {["Overview", "Projects"].includes(activeTab) && (
+              <>
+                <div className="mb-6 flex items-end justify-between gap-3">
+                  <div><h2 className="text-lg font-semibold">{activeTab === "Overview" ? "Recent projects" : "All projects"}</h2><p className={`mt-1 text-sm ${muted}`}>Keep track of work and project status.</p></div>
+                  <span className={`rounded-full px-3 py-1 text-sm font-medium ${isDark ? "bg-slate-800 text-slate-300" : "bg-slate-200 text-slate-700"}`}>{projects.length} {projects.length === 1 ? "project" : "projects"}</span>
+                </div>
+                {projects.length === 0 ? (
+                  <div className={`rounded-2xl border border-dashed px-6 py-16 text-center ${panel}`}><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-2xl text-indigo-700" aria-hidden="true">✦</div><h3 className="mt-4 text-lg font-semibold">No projects yet</h3><p className={`mx-auto mt-2 max-w-sm text-sm ${muted}`}>Create your first project to organize work and follow its progress.</p><button onClick={openCreate} className="mt-5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">Create a project</button></div>
+                ) : (
+                  <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                    {projects.map((project) => (
+                      <article key={project._id} role="link" tabIndex={0} onClick={() => navigate(`/projects/${project._id}`)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); navigate(`/projects/${project._id}`); } }} className={`group flex min-h-[250px] cursor-pointer flex-col rounded-2xl border p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-500/30 ${panel}`}>
+                        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate text-lg font-bold">{project.title}</h3><span className={`mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${project.status === "Completed" ? (isDark ? "bg-blue-950 text-blue-300" : "bg-blue-50 text-blue-700") : project.status === "Archived" ? (isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600") : (isDark ? "bg-emerald-950 text-emerald-300" : "bg-emerald-50 text-emerald-700")}`}><span className={`h-1.5 w-1.5 rounded-full ${project.status === "Completed" ? "bg-blue-500" : project.status === "Archived" ? "bg-slate-400" : "bg-emerald-500"}`} />{project.status || "Active"}</span></div><div aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">◈</div></div>
+                        <p className={`mt-4 line-clamp-3 min-h-[4.5rem] text-sm leading-6 ${muted}`}>{project.description || "No description added yet."}</p>
+                        <div className={`mt-auto flex items-center justify-between border-t pt-4 ${isDark ? "border-slate-800" : "border-slate-100"}`}><span className={`text-xs ${muted}`}>Open workspace</span><div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"><button type="button" onClick={(event) => { event.stopPropagation(); openEdit(project); }} className={`rounded-lg px-3 py-2 text-sm font-semibold text-indigo-600 transition ${isDark ? "hover:bg-slate-800" : "hover:bg-indigo-50"}`}>Edit</button><button type="button" onClick={(event) => { event.stopPropagation(); setError(""); setDeleteProject(project); }} aria-label={`Delete ${project.title}`} className="rounded-lg px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button></div></div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === "Tasks" && (
+              <div><div className="mb-6"><h2 className="text-lg font-semibold">Tasks across your projects</h2><p className={`mt-1 text-sm ${muted}`}>Select a task to open its project workspace.</p></div>
+                {tasksLoading ? <p role="status" className={muted}>Loading tasks…</p> : tasksError ? <p role="alert" className="rounded-lg bg-rose-100 px-4 py-3 text-sm text-rose-800">{tasksError}</p> : tasks.length === 0 ? <div className={`rounded-2xl border p-8 text-center ${panel}`}><p className="font-semibold">No tasks yet</p><p className={`mt-2 text-sm ${muted}`}>Tasks created inside your project workspaces will appear here.</p></div> : <div className={`overflow-hidden rounded-2xl border ${panel}`}><ul className="divide-y divide-slate-200 dark:divide-slate-800">{tasks.map((task) => <li key={task._id}><button type="button" onClick={() => navigate(`/projects/${task.projectId}`)} className={`flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition ${isDark ? "hover:bg-slate-800" : "hover:bg-slate-50"}`}><span className="min-w-0"><span className="block truncate font-semibold">{task.name}</span><span className={`mt-1 block truncate text-sm ${muted}`}>{task.projectTitle}</span></span><span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${task.status === "Completed" ? "bg-emerald-100 text-emerald-700" : task.status === "Pending" ? "bg-amber-100 text-amber-700" : "bg-sky-100 text-sky-700"}`}>{task.status}</span></button></li>)}</ul></div>}
+              </div>
+            )}
+
+            {activeTab === "Reports" && (
+              <div><div className="mb-6"><h2 className="text-lg font-semibold">Workspace report</h2><p className={`mt-1 text-sm ${muted}`}>A live summary based on your current project and task data.</p></div>
+                {tasksLoading ? <p role="status" className={muted}>Loading report…</p> : tasksError ? <p role="alert" className="rounded-lg bg-rose-100 px-4 py-3 text-sm text-rose-800">{tasksError}</p> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[["Projects", projects.length], ["Active projects", projectStats.active], ["Completed projects", projectStats.completed], ["Tasks", taskStats.total], ["Active tasks", taskStats.active], ["Pending tasks", taskStats.pending], ["Completed tasks", taskStats.completed]].map(([label, value]) => <article key={label} className={`rounded-2xl border p-5 ${panel}`}><p className={`text-sm font-medium ${muted}`}>{label}</p><p className="mt-3 text-3xl font-bold">{value}</p></article>)}</div>}
+              </div>
+            )}
+
+            {activeTab === "Profile" && (
+              <div className="mx-auto max-w-3xl"><div className="mb-6"><h2 className="text-lg font-semibold">Your profile</h2><p className={`mt-1 text-sm ${muted}`}>Manage the personal details shown in your workspace.</p></div>
+                <div className={`rounded-2xl border p-6 sm:p-8 ${panel}`}>
+                  <div className="flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                    <div className="flex items-center gap-4">{User?.avatar ? <img src={User.avatar} alt={`${User?.name || "User"} avatar`} className="h-20 w-20 rounded-2xl object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-indigo-100 text-2xl font-bold text-indigo-700">{initials(User?.name)}</div>}<div><h3 className="text-xl font-bold">{User?.name || "Your name"}</h3><p className={`mt-1 ${muted}`}>{User?.email}</p></div></div>
+                    {!editingProfile && <button type="button" onClick={() => { setProfileForm(emptyProfileForm(User)); setProfileError(""); setProfileMessage(""); setEditingProfile(true); }} className={`rounded-lg border px-4 py-2.5 text-sm font-semibold ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-slate-300 hover:bg-slate-50"}`}>Edit profile</button>}
+                  </div>
+                  {profileMessage && <p role="status" className="mt-5 rounded-lg bg-emerald-100 px-4 py-3 text-sm text-emerald-800">{profileMessage}</p>}
+                  {editingProfile && <form onSubmit={saveProfile} className="mt-6 space-y-5">
+                    <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>Full name<input required maxLength={100} value={profileForm.name} onChange={(event) => setProfileForm((current) => ({ ...current, name: event.target.value }))} autoComplete="name" className={`mt-2 w-full rounded-lg border px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 ${isDark ? "border-slate-700 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-900"}`} /></label>
+                    <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>Email address<input required type="email" value={profileForm.email} onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))} autoComplete="email" className={`mt-2 w-full rounded-lg border px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 ${isDark ? "border-slate-700 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-900"}`} /></label>
+                    <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>Avatar image URL <span className={`font-normal ${muted}`}>(optional)</span><input type="url" value={profileForm.avatar} onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.value }))} placeholder="https://example.com/avatar.jpg" className={`mt-2 w-full rounded-lg border px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 ${isDark ? "border-slate-700 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-900"}`} /></label>
+                    {profileError && <p role="alert" className="rounded-lg bg-rose-100 px-4 py-3 text-sm text-rose-800">{profileError}</p>}
+                    <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" disabled={saving} onClick={() => { setEditingProfile(false); setProfileForm(emptyProfileForm(User)); setProfileError(""); }} className={`rounded-lg border px-4 py-2.5 text-sm font-semibold ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-slate-300 hover:bg-slate-50"}`}>Cancel</button><button type="submit" disabled={saving} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">{saving ? "Saving…" : "Save profile"}</button></div>
+                  </form>}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "Settings" && (
+              <div className="mx-auto max-w-3xl"><div className="mb-6"><h2 className="text-lg font-semibold">Workspace settings</h2><p className={`mt-1 text-sm ${muted}`}>Customize the dashboard to suit your workflow.</p></div>
+                <div className={`divide-y rounded-2xl border px-5 ${panel}`} style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                  <div className="flex items-center justify-between gap-4 py-5"><div><p className="font-semibold">Color theme</p><p className={`mt-1 text-sm ${muted}`}>Choose light or dark appearance.</p></div><button type="button" onClick={() => setTheme(isDark ? "light" : "dark")} className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white">{isDark ? "Switch to light" : "Switch to dark"}</button></div>
+                  <div className="flex items-center justify-between gap-4 py-5"><div><p className="font-semibold">Sidebar width</p><p className={`mt-1 text-sm ${muted}`}>Keep the full navigation labels or collapse to icons.</p></div><button type="button" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} className={`rounded-lg border px-4 py-2.5 text-sm font-semibold ${isDark ? "border-slate-700 hover:bg-slate-800" : "border-slate-300 hover:bg-slate-50"}`}>{sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}</button></div>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
 
       {dialogOpen && (
         <div className="fixed inset-0 z-20 flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) closeDialog(); }}>
@@ -233,9 +354,3 @@ function Dashboard() {
 }
 
 export default Dashboard;
-
-
-
-
-
-

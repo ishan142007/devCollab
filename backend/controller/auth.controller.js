@@ -81,4 +81,52 @@ const signup=async(req,res)=>{
     }
  }
 
-export {signup,login,me};
+const updateMe = async (req, res) => {
+    try {
+        const { name, email, avatar } = req.body ?? {};
+        const update = {};
+
+        if (name !== undefined) {
+            if (typeof name !== "string" || !name.trim()) {
+                return res.status(400).json({ message: "name is required" });
+            }
+            update.name = name.trim();
+        }
+        if (email !== undefined) {
+            if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+                return res.status(400).json({ message: "enter a valid email address" });
+            }
+            update.email = email.trim().toLowerCase();
+        }
+        if (avatar !== undefined) {
+            if (typeof avatar !== "string") {
+                return res.status(400).json({ message: "avatar must be a URL" });
+            }
+            update.avatar = avatar.trim();
+        }
+        if (Object.keys(update).length === 0) {
+            return res.status(400).json({ message: "please send valid profile changes" });
+        }
+
+        if (update.email) {
+            const existingUser = await User.findOne({ email: update.email, _id: { $ne: req.user.id } });
+            if (existingUser) {
+                return res.status(409).json({ message: "email is already in use" });
+            }
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(req.user.id, update, {
+            returnDocument: "after",
+            runValidators: true
+        }).select("name email avatar");
+        if (!updatedUser) {
+            return res.status(404).json({ message: "user not found" });
+        }
+
+        return res.status(200).json({ message: "profile updated", data: updatedUser });
+    } catch (error) {
+        return res.status(500).json({ message: "could not update profile", error: error.message });
+    }
+};
+
+export {signup,login,me,updateMe};

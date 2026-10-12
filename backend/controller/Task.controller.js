@@ -35,12 +35,17 @@ export const createTask = async (req, res) => {
             return res.status(404).json({ message: "project not found" });
         }
 
+        const normalizedAssignee = typeof assignee === "string" ? assignee.trim() : assignee;
+        if (normalizedAssignee && !mongoose.Types.ObjectId.isValid(normalizedAssignee)) {
+            return res.status(400).json({ message: "invalid assignee id" });
+        }
+
         const task = await Task.create({
             name: name.trim(),
             description,
             status,
             priority,
-            assignee,
+            assignee: normalizedAssignee || undefined,
             project: project._id,
             owner
         });
@@ -123,9 +128,15 @@ export const updateTask = async (req, res) => {
             update.name = update.name.trim();
         }
         if (update.assignee === "") {
-            update.assignee = null;
+            update.assignee = undefined;
         }
-        if (update.assignee != null && !mongoose.Types.ObjectId.isValid(update.assignee)) {
+        if (update.assignee != null && typeof update.assignee === "string" && update.assignee.trim() === "") {
+            update.assignee = undefined;
+        }
+        if (update.assignee != null && typeof update.assignee === "string" && !mongoose.Types.ObjectId.isValid(update.assignee.trim())) {
+            return res.status(400).json({ message: "invalid assignee id" });
+        }
+        if (update.assignee != null && typeof update.assignee !== "string" && !mongoose.Types.ObjectId.isValid(update.assignee)) {
             return res.status(400).json({ message: "invalid assignee id" });
         }
 
